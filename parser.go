@@ -88,12 +88,17 @@ func (p *Parser) parseStmt() (Node, error) {
 // 	}
 // }
 
-func (p *Parser) parseExpr(end uint) (Node, error) {
+func (p *Parser) parseExpr(stop uint) (Node, error) {
 	nested := NestedExpr{}
 	var prev *Node = nil
-
-	// Maybe a nested expression end
-	for !p.maybeTok(end).Ok {
+	var end Token
+	
+	for {
+		end = p.maybeTok(stop, End)
+		if end.Ok {
+			break
+		}
+		
 		expr, err := p.parseNextExpr(prev)
 		if err != nil {
 			return nil, err
@@ -104,6 +109,10 @@ func (p *Parser) parseExpr(end uint) (Node, error) {
 			break
 		}
 		prev = &expr
+	}
+
+	if end.Trait != stop {
+		return nil, p.errorf(end, `Unexpected end of source during expression parsing`)
 	}
 
 	return nested, nil
@@ -120,6 +129,8 @@ func (p *Parser) parseNextExpr(prev *Node) (Node, error) {
 	}
 
 	if str := p.maybeTok(RawStr, Str); str.Ok {
+		content := str.Expr[1 : len(str.Expr) - 1]
+		
 		var content string
 
 		switch str.Trait {
@@ -132,6 +143,9 @@ func (p *Parser) parseNextExpr(prev *Node) (Node, error) {
 		return StrExpr{content}, nil
 	}
 
+	// Integers and floats constants infers to 32-64 bits depending on the size
+	// Must have an explicit cast in order to access smaller parts of the register
+	
 	if int := p.maybeTok(IntDec, IntBin, IntHex); int.Ok {
 		var (
 			n    int64
@@ -159,7 +173,7 @@ func (p *Parser) parseNextExpr(prev *Node) (Node, error) {
 
 	if float := p.maybeTok(Float); float.Ok {
 		f, err := strconv.ParseFloat(float.Expr, 64)
-
+		
 		var size uint
 		if f > math.MaxFloat32 {
 			size = 64
@@ -170,6 +184,7 @@ func (p *Parser) parseNextExpr(prev *Node) (Node, error) {
 		return FloatExpr{f, size}, err
 	}
 
+	// Implementation doesn't support multibyte character constants !
 	if char := p.maybeTok(Char); char.Ok {
 		content := UnescapeStr(char.Expr[1 : len(char.Expr)-1])
 		switch len(content) {

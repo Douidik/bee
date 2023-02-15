@@ -1,7 +1,7 @@
 package main
 
 type Ast struct {
-	head   HeadStmt
+	head   CompoundStmt
 	scopes []Scope
 }
 

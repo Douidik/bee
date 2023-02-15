@@ -2,14 +2,13 @@ package main
 
 import (
 	"io"
+	"math"
+	"strings"
 )
 
-type HeadStmt struct {
-	Body []Node
-}
-
 type CompoundStmt struct {
-	Body []Node
+	Body  []Node
+	Depth uint
 }
 
 type IfStmt struct {
@@ -42,20 +41,35 @@ type ExprStmt struct {
 	Expr Node
 }
 
-func (h *HeadStmt) Graph(w io.Writer) {
-	Writef(w, `strict digraph {`)
+const IntensityFac = 0.1
 
-	for _, stmt := range h.Body {
-		stmt.Graph(w)
+func shade(depth uint, color uint32) uint32 {
+	shaded := uint32(0x00)
+
+	for off := 0; off < 6; off += 2 {
+		channel := ((color >> off) & 0xff) * IntensityFac * depth
+		if channel > 0xff {
+			channel = 0xff
+		}
+		shaded |= channel << off
 	}
 
-	Writef(w, `}`)
+	return shaded
 }
 
 func (c *CompoundStmt) Graph(w io.Writer) {
 	Writef(w, `subgraph cluster_%p {`, c)
-	
-	for _, stmt := range c.Body {
+	color := shade(c.Depth, 0xFEF3BD)
+	desc := strings.NewBuilder()
+	desc.WriteString(``)
+	// # FFF9C4, each channel is has an inten
+
+	for n, _ := range c.Body {
+
+	}
+
+	for n, stmt := range c.Body {
+
 		stmt.Graph(w)
 	}
 
