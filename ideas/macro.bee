@@ -1,0 +1,19 @@
+// No macro
+
+Vec :: struct <T> {
+    data : &[T]
+    size : u64
+}
+
+vec_new :: <T> (size : u64) -> Vec<T> {
+
+}
+
+vec_from :: <T> (f : &[T]) -> Vec<T> {
+    vec : vec_new(f.size())
+    Mem.move<T>(vec.data, f)
+}
+
+push :: <T> ($ : Vec<T>, pushed : T) {
+    
+}

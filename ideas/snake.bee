@@ -1,0 +1,227 @@
+#import_c "SDL2/SDL.h"
+#import "std/beespace.bee"
+#import "std/random.bee"
+#import "std/args.bee"
+#import "std/fs.bee"
+
+#beespace :: snake_beespace()
+
+snake_beespace :: () -> Bee.Beespace {
+    beespace : Bee.beespace_standard()
+    beespace.name = "snake"
+    beespace.desc = "Snake game made with Bee using SDL2"
+    beespace.sources = ["snake.bee"]
+    
+    return beespace
+}
+
+Snake :: struct {
+    x : s32
+    y : s32
+    next : &Snake
+}
+
+snake_new :: (x : s32, y : s32) -> &Snake {
+    return Mem.new(Snake{x, y, none})
+}
+
+grow :: ($ : &Snake) {
+    if next != none {
+        next.grow() 
+    } else {
+        next = snake_new(x, y)
+    }
+}
+
+hits :: ($ : &Snake, x : s32, y : s32) -> bool {
+    return ($.x, $.y == x, y) or (next != none and next.hits(x, y))
+}
+
+move :: ($ : &Snake, x : s32, y : s32) {
+    before_x, before_y : $.x, $.y
+    if next != none {
+        next.move(before_x, before_y)
+    }
+    $.x, $.y = x, y
+}
+
+draw :: ($ : &Snake, renderer : &SDL_Renderer, unit_w : u32, unit_h : u32) {
+    if next != none { next.draw(renderer, unit_w, unit_h) }
+    SDL_SetRenderDrawColor(renderer, 0xff, 0xff, 0xff, 0xff)
+    SDL_RenderDrawRect(renderer, &SDL_Rect{x * unit_w, y * unit_h, unit_w, unit_h})
+}
+
+free :: ($ : &Snake) {
+    if next != none { next.free() }
+    Mem.free($)
+}
+
+Food :: struct {
+    x : s32
+    y : s32
+}
+
+food_random :: (max_x : s32, max_y : s32) -> Food {
+    return Food{
+        x : Rand.between_s32(0, max_x),
+        y : Rand.between_s32(0, max_y),
+    }
+}
+
+draw :: ($ : &Food, renderer : &SDL_Renderer, unit_w : u32, unit_h) {
+    SDL_SetRenderDrawColor(renderer, 0x0a, 0x00, 0xfb, 0xff)
+    SDL_RenderDrawRect(renderer, &SDL_Rect{x*unit_w, y*unit_h, unit_w, unit_h})
+}
+
+Game :: struct {
+    snake : &Snake
+    window : &SDL_Window
+    renderer : &SDL_Renderer
+    keystate : &[u8]
+    window_w : u32
+    window_h : u32
+    stage_w : u32
+    stage_h : u32
+    dx : s32
+    dy : s32
+    score : u64
+}
+
+game_new :: (window_w : u32, window_h : u32, stage_w : u32, stage_h : u32) -> Game, ?Error {
+    context_error :: () -> Game, ?Error {
+        return game, Error.new("SDL: {:s}", SDL_GetError())
+    }
+
+    game : Game(0)
+
+    if SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS) < 0 {
+        return context_error()
+    }
+    
+    if game.window = SDL_CreateWindow(
+            "Snake",
+            SDL_WINDOWPOS_CENTERED,
+            SDL_WINDOWPOS_CENTERED,
+            (game.window_w = window_w),
+            (game.window_h = window_h),
+            0,
+    ); !game.window {
+        return context_error()
+    }
+
+    if game.renderer = SDL_CreateRenderer(game.window, -1, 0); !game.window {
+        return context_error()
+    }
+
+    keycount : s32
+    keystate : SDL_GetKeyboardState(&keycount)
+    if !keystate {
+        return context_error()
+    }
+    game.keystate = &[u8](keystate, keycount)
+
+    game.score = 0
+    game.snake = snake_new(w/2, h/2)
+    game.food = food_random(stage_w, stage_h)
+    game.stage_w = w
+    game.stage_h = h
+    
+    return game, none
+}
+
+update :: ($ : &Game) {
+    dx, dy = 0
+
+    for key, state : each keys {
+        if !state {
+            continue
+        }
+            
+        switch key {
+        case SDLK_RIGHT : dx++
+        case SDLK_LEFT  : dx--
+        case SDLK_UP    : dy--
+        case SDLK_DOWN  : dy++
+        }
+    }
+
+    snake.move(snake.x + dx, snake.y + dy)
+    
+    if snake.x, snake.y == food.x, food.y {
+        snake.grow()
+        for food = food_random(); snake.hits(food.x, food.y) {
+        }
+	score++
+    }
+
+    if
+    snake.x < 0 ||
+    snake.y < 0 ||
+    snake.x >= stage_w ||
+    snake.y >= stage_h ||
+    (snake.next != none and snake.hits(snake.x, snake.y)) ||
+    (score >= (stage_w * stage_h - 1)) {
+        $.free(); $ = game_new()
+    }
+}
+
+render :: ($ : &Game) {
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0)
+    SDL_RenderClear(renderer)
+
+    unit_w : u32(window_w / stage_w)
+    unit_h : u32(window_h / stage_h)
+    food.draw(renderer, unit_w, unit_h)
+    snake.draw(renderer, unit_w, unit_h)
+    
+    SDL_RenderPresent(renderer)
+}
+
+run :: ($ : &Game) {
+    for {
+        for event : SDL_Event; SDL_PollEvent(&event) {
+            switch event.type {
+            case SDL_QUIT:
+                return
+            case SDL_WINDOWEVENT:
+                if event.window.event == SDL_WINDOWEVENT_RESIZED {
+                    SDL_GetWindowSize(window, &window_w, &window_h)
+                }
+            }
+        }
+        update()
+        render()
+    }
+}
+
+free :: ($ : &Game) {
+    snake.free()
+    SDL_DestroyRenderer(renderer)
+    SDL_DestroyWindow(window)
+    SDL_Quit()
+}
+
+main :: (argc : u32, argv : [&[char]]) -> u32 {
+    args : Args.parser_new(
+        {type : Args.Number, name : "window_w", what : "Window width", fallback : 800},
+        {type : Args.Number, name : "window_h", what : "Window height", fallback : 800},
+        {type : Args.Number, name : "stage_w", what : "Stage width", fallback : 16},
+        {type : Args.Number, name : "stage_h", what : "Stage height", fallback : 16},
+    ).parse(argc, argv); defer args.free()
+    
+    game, err : game_new(
+        args.at("window_w"),
+        args.at("window_h"),
+        args.at("stage_w"),
+        args.at("stage_h"),
+    )
+    
+    if err != none {
+        printf(stderr, "{}", err)
+        return 1
+    }
+
+    game.run()
+    game.free()
+    return 0
+}

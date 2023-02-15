@@ -1,0 +1,245 @@
+#import 'std/format.bee'
+#import 'std/ds.bee'
+#import 'std/vec.bee'
+#import 'std/hash_map.bee'
+#import 'nes/bus.bee'
+
+vec_example :: () {
+    buf : &[u32]
+    Vec.push(buf, 1, 2, 3, 4)
+    
+    for n, v : buf.each() {
+        printf('{04d} | {04d}\n', n, v)
+    }
+}
+
+anger_management_algorithms :: () {
+    // Each array has .size() and .cap()
+    // Stack array
+    buf : [u8;32]
+    buf.size() // 0
+    buf.cap() // 32
+
+    x : buf.append(32)
+    y : buf.append(16)
+    z : buf.pop()
+
+    baf : [u8;32;32]
+    buf.size() // 32
+    buf.cap() // 32
+
+    x : buf.append(32) // Runtime error
+    y : buf.append(16)
+    z : buf.pop()
+    
+    // Mem-span 
+    dyn : &[u32]
+    dyn.size(), dyn.cap() // 0, 0
+    dyn.vec_new(2)        // Points to heap memory
+    dyn.size(), dyn.cap() // 0, 2
+    dyn.vec_push(1)
+    dyn.vec_push(2)
+    dyn.vec_push(3)       // Mem.free(&buf[0]) gets called and vector make a new allocation twice bigger
+    dyn.vec_free()
+}
+
+search_rune :: ($ : &[char], f : rune) -> &rune {
+    // Mem.search_u32($, u32(f))
+
+    r : &rune
+    for _, r : $.each_ref() and r != f {
+    }
+
+    if r != f {
+        return r
+    }
+    return none
+}
+
+string_manip :: (name : &[char]) -> &[char] {
+    // Most Mem. functions works on strings, these are just spans of bytes
+    a : name.search_byte(u8('a'))
+    c : name.search_char(char('b'))
+
+    // But unicode strings works diffrently
+    if r : name.search_rune(rune('💡')); r != none {
+        return r.some()
+    }
+
+    for _, r : name.each_rune() {
+        printf(stdout, '{}', r)
+    }
+
+    if sub : name.search_str('yeet'); &sub[0] != none {
+        a : &sub[0] - &name[0]
+        b : &sub[-1] - &name[0] + 1
+        printf('{} |yeet| {}', name[:a], name[b:]
+    }
+}
+
+CpuStatus :: enum(u8) {
+    C :: 1 << 0
+    Z :: 1 << 1
+    I :: 1 << 2
+    D :: 1 << 3
+    B :: 1 << 4
+    U :: 1 << 5
+    V :: 1 << 6
+    N :: 1 << 7
+}
+
+Cpu :: struct {
+    bus : &Bus
+    a   : u8
+    x   : u8
+    y   : u8
+    sp  : u8
+    pc  : u16
+    st  : u8
+    zzz : u8
+}
+
+// Cpu registers can now be serialized and formatted
+
+ds_map :: ($ : &Cpu, map : &DS.Map) {
+    map.def(
+        ('a', a),
+        ('x', x),
+        ('y', y),
+        ('sp', sp),
+        ('pc', pc),
+        ('st', st),
+        ('zzz', zzz),
+    )
+}
+
+format :: ($ : &Cpu, dev : &Format.Device) {
+    status_name :: (st : u8, n : u8) -> char {
+        if st & (1 << n) {
+            return 'CZIDBUVN'[n]
+        } else {
+            return 'czidbuvn'[n]
+        }
+    }
+
+    status_name_ :: (st : u8, n : u8) -> char {
+        name : #name(CpuStatus(n))
+        if name.size() != 1 {
+            return '?'
+        }
+        return name[0]
+    }
+
+    dev.printf('| a: {:02X}, x: {:02X}, y: {:02X}, sp: {:02X}, pc: {:04X} st: ', a, x, y, sp, pc)
+    for n : 0; n < 8; n++ {
+        dev.printf('{}', status_name(st, n))
+    }
+    dev.printf(' |\n')
+}
+
+cpu_new :: (bus : &Bus) -> Cpu {
+    return Cpu{bus : bus, a, x, y, sp, st : 0xff, pc : 0xffff}
+}
+
+boot :: ($ : &Cpu) {
+    a, x, y, sp, pc, st, zzz = 0
+}
+
+update :: ($ : &Cpu) {
+    if zzz != 0 {
+        zzz--
+        return
+    }
+
+    opcode : bus.cpu_read(pc++)
+    inst : inst_set[opcode]
+    parse_inst(inst)
+}
+
+parse_inst :: ($ : &Cpu, inst : Instruction) {
+    #use AddrMode, Mnemonic
+    
+    switch inst.mode {
+    case Acc:
+        if output : exec_operation(inst, Some{a}); output.has {
+            a = output
+        }
+
+    case Imm:
+        exec_operation(inst, Some{bus.cpu_read(pc++)})
+
+    case Imp:
+        exec_operation(inst, None{})
+
+    case Rel:
+        offset : u16(m_bus.cpu_read(pc++))
+        if offset & 0x80 {
+            offset |= 0xff00
+        }
+
+        exec_operation(inst, offset)
+        
+    case Abs, Abx, Aby, Ind, Idx, Idy, Zer, Zpx, Zpy:
+        
+    }
+}
+
+stack_base :: 0x100
+
+stack_push :: ($ : &Cpu, data : u8) -> u8 {
+    return bus.cpu_write(stack_base + sp--, data)
+}
+
+stack_pop :: ($ : &Cpu) {
+    return m_bus.cpu_read(stack_base + ++sp)
+}
+
+
+stdout_buf : [char; 2048; 0]{0}
+    
+printf :: (fmt : &[char], args : &Format.Argument) -> u32, Error? {
+    size : Format.compute_size(fmt, args)
+    stream : &StreamO
+    
+    if fmt.search_char('\n') or size + stdout_buf.size() > stdout_buf.cap() {
+        if err : stdout.write(stdout_buf); err != Error.ok() {
+            return 0, err
+        }
+        stdout_buf = {0}
+        stream = stdout
+    } else {
+        stream = stdout_buf
+    }
+
+    return Format.printf(fmt, args).1
+}
+
+
+#beespace :: nes_beespace()
+
+nes_beespace :: () -> Bee.Beespace {
+    parse_sources :: (sources : &[Fs.File], dir : Fs.Directory) {
+        regex :: Regex.New(`^* '.bee'`)
+        
+        for _, entry : dir.each() {
+            switch (entry.type) {
+            case Fs.Type.File:
+                f : entry.file
+                if regex.match(f.name()) != -1 {
+                    sources.vec_push(f)
+                }
+                
+            case Fs.Type.Directory:
+                parse_sources(sources, entry.directory)
+            }
+        }
+    }
+    
+    beespace : Bee.standard_beespace()
+    beespace.name = 'nes'
+    beespace.desc = 'nes emulator made with the bee programming language'
+    beespace.deps.append(Bee.Dependency{'https://github.com/douidik/bee-json'}))
+    parse_sources(beespace.sources)
+    
+    return beespace
+}

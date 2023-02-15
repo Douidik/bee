@@ -1,0 +1,134 @@
+#import 'std/fs.bee'
+#import 'std/error.bee'
+#import 'std/io.bee'
+#import 'std/args.bee'
+#import 'std/parse.bee'
+
+Type :: enum(u32, iota) {
+      MapBegin,
+      MapEnd,
+      ArrBegin,
+      ArrEnd,
+      Name,
+      Assign,
+      Str,
+      Int,
+      Float,
+      Comma,
+}
+
+Object :: struct {
+    name : &[char],
+    data : Data,
+}
+
+Data :: union(type) {
+    null : struct{},
+    str : [char],
+    int : i32,
+    float : f32,
+    map : [Object],
+    array : [Data],
+}
+
+json_syntax_map :: () -> Parse.SyntaxMap {
+    using Type
+    return Parse.syntax_map_new(
+        (`'{'`, MapBegin),
+        (`'}'`, MapEnd),
+        (`'['`, ArrBegin),
+        (`']'`, ArrEnd),
+        (`{a|'_'} {a|n|'_'}*`, Name),
+        (`Q ~ Q`, Str),
+        (`[0-9]+`, Int),
+        (`[0-9]+ '.' [0-9]+ 'f'?`, Float),
+        (`','`, Comma),
+    )
+}
+
+json_parse_data :: (scanner : &Parse.scanner) -> Data, Error {
+    switch tok : scanner.tokenize(); tok.type {
+    case Type.ArrBegin:
+        data : Data{array : []}
+        
+        for member, err : json_parse_data(scanner); 1 {
+            if err != Error.ok() {
+                return Data{}, err
+            }
+            data.array.append(member)
+                
+            if comma : scanner.tokenize(); comma.type != Type.Comma {
+                return Data{}, Error
+            }
+                
+            if scanner.tokenize().type == Type.ArrEnd {
+                break
+            }
+        }
+        return data
+        
+    case Type.Str:
+        return Data{str : tok[1 : tok.size - 1]}
+        
+    case Type.Int:
+        return Data{int : Parse.int(tok)}
+        
+    case Type.Float:
+        return Data{float : Parse.float(tok)}
+    }
+}
+
+from_str :: ($ : u32, str : &[char]) {
+    Str.parse_number(Unsigned, 32, $)
+}
+
+json_parse :: (scanner : &Parse.scanner) -> (Object, Error) {
+    name : scanner.tokenize()
+    if name.type != Type.Name {
+            return Object{}, Error.new('expected name on {}', scanner.coords())
+    }
+
+    switch assign : scanner.tokenize(); assign.type {
+    case Type.MapBegin:
+        obj : Object{
+            name : name,
+            data : map{},
+        }
+        
+        for tok : scanner.tokenize(); tok.type != Type.MapEnd {
+                member, err : json_parse(scanner)
+                if err != Error.ok() {
+                        return Object{}, err
+                }
+                obj.map.append(member)
+        }
+
+        return obj
+        
+    case Type.Assign:
+        obj : Object{name : name, data : null{}}
+        
+        
+    case _:
+        return Object{}, Error.new('unexpected <{}> after name on {}', tok.type, scanner.coords())
+    }
+}
+
+main :: (argc : u32, argv : &[&[char]]) -> u32 {
+     if argc < 2 {
+     	     Io.printf(Io.stderr, '[usage] ./json_checker <input_file>')
+	return 1
+     }
+
+args : Args.parse(argc, argv)
+
+     fstream, err : Fs.open(args.as_str(0), Fs.w | Fs.r)
+     if err != Error.ok() {
+        Error.print(err)
+	return 1
+     }
+
+    syntax_map :: json_syntax_map()
+    scanner : Parse.scanner_new(syntax_map)
+    json, err : json_parse(none, scanner)
+}

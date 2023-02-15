@@ -1,0 +1,54 @@
+#import 'std/iter.bee'
+#import 'std/printf.bee'
+#import 'std/math.bee'
+
+Range :: struct {
+    a : s32
+    b : s32
+}
+
+size :: ($ : &Range) -> u32 {
+    return Math.max(a, b) - Math.min(a, b)
+}
+
+iter :: ($ : &Range, n : u32, x : s32) -> (u32, ?s32) {
+     if a < b and x + 1 <= b {
+        return n + 1, x + 1
+     }
+     if a > b and x - 1 >= b {
+        return n + 1, x - 1
+     }
+     return n + 1, none
+}
+
+for_demonstation :: () {
+    xs : [s32; 8]
+
+    for _, x : xs.each() {
+    }
+
+    rn : Range{0, 100}
+    sz : rn.size()
+    for i, n : each rn {
+        printf('{:s32}', n)
+        if n < sz - 1 {
+            printf(', ')
+        }
+    }
+}
+
+Vec.new :: (buf : &Span, x : &Any) -> &Span {
+    size : buf.size()
+    type_size : buf.type().size()
+}
+
+
+vec_demonstration :: () {
+    xs : Vec.new(&[f32; 8], 10.f) // xs -> {10.f,10.f,10.f,10.f,10.f,10.f,10.f,10.f}
+    defer Vec.free(xs)
+    xs[4] = 24.0f                 // xs -> {10.f,10.f,10.f,10.f,24.f,10.f,10.f,10.f}
+    xs.cap() // maybe 8
+    Vec.push(xs, .1f, .01f, .001f, .0001f) // xs -> {10.f,10.f,10.f,10.f,24.f,10.f,10.f,10.f,.1f,.01f,.001f,.0001f}
+    xs.cap() // buf has been freed and reallocated with a capacity of 16 floats
+    
+}
