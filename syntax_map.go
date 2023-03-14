@@ -5,14 +5,14 @@ import (
 )
 
 type Pattern struct {
-	Trait uint
+	Trait Trait
 	Regex Regex
 }
 
 type SyntaxMap []Pattern
 
 func NewBeeSyntax() SyntaxMap {
-	def := func(trait uint, src string) Pattern {
+	def := func(trait Trait, src string) Pattern {
 		rx, err := NewRegex(src)
 		if err != nil {
 			fmt.Println(err)
@@ -26,7 +26,7 @@ func NewBeeSyntax() SyntaxMap {
 		def(Blank, `_+`),
 		def(Comment, `'//' {^  ~ '\n'}'`),
 		def(Directive, `'#' {^  ~ '\n'}'`),
-		
+
 		def(KwStruct, `'struct'/!a`),
 		def(KwEnum, `'enum'/!a`),
 		def(KwUnion, `'union'/!a`),
@@ -43,6 +43,7 @@ func NewBeeSyntax() SyntaxMap {
 		def(KwSwitch, `'switch'/!a`),
 		def(KwAnd, `'and'/!a`),
 		def(KwOr, `'or'/!a`),
+		def(KwOr, `'fn'/!a`),
 
 		def(ParenBegin, `'('`),
 		def(ParenEnd, `')'`),
@@ -61,10 +62,10 @@ func NewBeeSyntax() SyntaxMap {
 		def(IntDec, `[0-9]+`),
 		def(IntBin, `'0b' [0-1]+`),
 		def(IntHex, `'0x' {[0-9]|[a-f]|[A-F]}+`),
-		
-		def(RawStr, " '`' ^ '`' "),
-		def(Str, "Q {{{'\\'^}|^} ~ /{Q|'\n'}} ? {Q|'\n'}"),
-		def(Char, "q {{{'\\'^}|^} ~ /{q|'\n'}} ? {q|'\n'}"),
+
+		def(RawStr, "Q^Q"),
+		def(Str, "q {{{'\\'^}|^} ~ /{q|'\n'}} ? {q|'\n'}"),
+		def(Char, "'`' {{{'\\'^}|^} ~ /{'`'|'\n'}} ? {'`'|'\n'}"),
 		def(Identifier, `{a|'_'} {a|'_'|n}*`),
 
 		def(Declare, `'::'`),

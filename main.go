@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
-	"strconv"
+	// "strconv"
 )
 
 func main() {
@@ -14,7 +14,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	tok := Token{}
 	src, err := os.ReadFile(args[0])
 	if err != nil {
 		fmt.Println(err)
@@ -22,15 +21,48 @@ func main() {
 	}
 
 	sn := NewScanner(string(src), NewBeeSyntax())
-
-	for tok.Trait != End {
-		tok = sn.Tokenize()
-		fmt.Printf("%20s: %s\n", strconv.Quote(tok.Expr), BeeTraitName(tok.Trait))
+	ps := NewParser(sn)
+	ast, err := ps.Parse()
+	if err != nil {
+		fmt.Printf("%v\n", ast)
 	}
 }
 
+// func max(a, b int) int {
+// 	if a > b {
+// 		return a
+// 	} else {
+// 		return b
+// 	}
+// }
+
 // func main() {
-// 	fmt.Println("Bee - programming language")
+// 	args := os.Args[1:]
+
+// 	if len(args) < 1 {
+// 		fmt.Println(`No sources specified in the command line arguments`)
+// 		os.Exit(1)
+// 	}
+
+// 	src, err := os.ReadFile(args[0])
+// 	if err != nil {
+// 		fmt.Println(err)
+// 		os.Exit(1)
+// 	}
+
+// 	sn := NewScanner(string(src), NewBeeSyntax())
+// 	toks := []Token{}
+// 	maxLen := 0
+
+// 	for !sn.Finished() {
+// 		toks = append(toks, sn.Tokenize())
+// 	}
+// 	for _, tok := range toks {
+// 		maxLen = max(maxLen, len(tok.Expr))
+// 	}
+// 	for _, tok := range toks {
+// 		fmt.Printf("%*s : %s\n", maxLen, strconv.Quote(tok.Expr), BeeTraitName(tok.Trait))
+// 	}
 // }
 
 // func main() {
@@ -58,9 +90,13 @@ func main() {
 // 		}
 // 		match := rx.Match(expr)
 // 		if match < 0 {
-// 			fmt.Printf(`"%s" -> "%s" : no-match`, src, expr)
+// 			fmt.Printf(`"%s" -> "%s" :: no-match :(`, src, expr)
 // 		} else {
-// 			fmt.Printf(`"%s" -> "%s" : %s`, src, expr, expr[:match])
+// 			fmt.Printf(`"%s" -> "%s" :: %s`, src, expr, expr[:match])
 // 		}
 // 	}
+// }
+
+// func main() {
+// 	fmt.Println("Bee - programming language")
 // }

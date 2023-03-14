@@ -1,12 +1,14 @@
 package main
 
+type Trait uint
+
 const (
-	None uint = iota
+	None Trait = iota
 
 	NewLine
 	Empty
 	Blank
-	End
+	Eof
 	Comment
 	Directive
 
@@ -27,6 +29,7 @@ const (
 	KwSwitch
 	KwAnd
 	KwOr
+	KwFn
 
 	Identifier
 
@@ -75,7 +78,7 @@ const (
 	Semicolon
 )
 
-func BeeTraitName(trait uint) string {
+func BeeTraitName(trait Trait) string {
 	switch trait {
 
 	case NewLine:
@@ -84,132 +87,136 @@ func BeeTraitName(trait uint) string {
 		return "Empty"
 	case Blank:
 		return "Blank"
-	case End:
-		return "End"
+	case Eof:
+		return "Eof"
 	case Comment:
 		return "Comment"
 	case Directive:
 		return "Directive"
 
 	case KwStruct:
-		return "KwStruct"
+		return "Struct"
 	case KwEnum:
-		return "KwEnum"
+		return "Enum"
 	case KwUnion:
-		return "KwUnion"
+		return "Union"
 	case KwUnderscore:
-		return "KwUnderscore"
+		return "Underscore"
 	case KwSelf:
-		return "KwSelf"
+		return "Self"
 	case KwArrow:
-		return "KwArrow"
+		return "Arrow"
 	case KwBreak:
-		return "KwBreak"
+		return "Break"
 	case KwCase:
-		return "KwCase"
+		return "Case"
 	case KwContinue:
-		return "KwContinue"
-	case KwDo:
-		return "KwDo"
+		return "Continue"
 	case KwElse:
-		return "KwElse"
+		return "Else"
 	case KwEach:
-		return "KwEach"
+		return "Each"
 	case KwFor:
-		return "KwFor"
+		return "For"
 	case KwIf:
-		return "KwIf"
+		return "If"
 	case KwReturn:
-		return "KwReturn"
+		return "Return"
 	case KwSwitch:
-		return "KwSwitch"
+		return "Switch"
 	case KwAnd:
-		return "KwAnd"
+		return "And"
 	case KwOr:
-		return "KwOr"
+		return "Or"
+	case KwFn:
+		return "Fn"
 
 	case Identifier:
 		return "Identifier"
 
 	case Float:
 		return "Float"
-	case Int:
-		return "Int"
+	case IntDec:
+		return "IntDec"
+	case IntBin:
+		return "IntBin"
+	case IntHex:
+		return "IntHex"
 	case Str:
 		return "Str"
 	case Char:
 		return "Char"
 
 	case Increment:
-		return "Increment"
+		return "++"
 	case Decrement:
-		return "Decrement"
+		return "--"
 	case ParenBegin:
-		return "ParenBegin"
+		return "("
 	case ParenEnd:
-		return "ParenEnd"
+		return ")"
 	case ScopeBegin:
-		return "ScopeBegin"
+		return "{"
 	case ScopeEnd:
-		return "ScopeEnd"
+		return "}"
 	case CrochetBegin:
-		return "CrochetBegin"
+		return "["
 	case CrochetEnd:
-		return "CrochetEnd"
+		return "]"
 	case Declare:
-		return "Declare"
+		return ":"
 	case Define:
-		return "Define"
+		return "::"
 	case Assign:
-		return "Assign"
+		return "="
 	case Arrow:
-		return "Arrow"
+		return "->"
 	case Not:
-		return "Not"
+		return "!"
 	case Add:
-		return "Add"
+		return "+"
 	case Sub:
-		return "Sub"
+		return "-"
 	case Mul:
-		return "Mul"
+		return "*"
 	case Div:
-		return "Div"
+		return "/"
 	case Mod:
-		return "Mod"
+		return "*"
 	case BinNot:
-		return "BinNot"
+		return "~"
 	case BinAnd:
-		return "BinAnd"
+		return "&"
 	case BinOr:
-		return "BinOr"
+		return "|"
 	case BinXor:
-		return "BinXor"
+		return "^"
 	case BinShiftL:
-		return "BinShiftL"
+		return "<<"
 	case BinShiftR:
-		return "BinShiftR"
+		return ">>"
 	case Equal:
-		return "Equal"
+		return "=="
 	case NotEq:
-		return "NotEq"
+		return "!="
 	case Less:
-		return "Less"
+		return "<"
 	case Greater:
-		return "Greater"
+		return ">"
 	case LessEq:
-		return "LessEq"
+		return "<="
 	case GreaterEq:
-		return "GreaterEq"
+		return ">="
 	case Ref:
-		return "Ref"
+		return "&"
 	case Deref:
-		return "Deref"
+		return "*"
 	case Dot:
-		return "Dot"
+		return "."
 	case Comma:
-		return "Comma"
+		return ","
 	case Semicolon:
-		return "Semicolon"
+		return ";"
 
 	default:
 		return "?"

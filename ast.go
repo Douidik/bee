@@ -1,33 +1,30 @@
 package main
 
 type Ast struct {
-	head   CompoundStmt
+	Body   []Node
 	scopes []Scope
 }
 
 type Scope struct {
-	Defs  []Def
+	Defs  map[string]Def
 	Owner *Scope
 }
 
 func (ast *Ast) NewScope(owner *Scope) *Scope {
-	ast.scopes = append(ast.scopes, Scope{Owner: owner})
+	ast.scopes = append(ast.scopes, Scope{Defs: make(map[string]Def), Owner: owner})
 	return &ast.scopes[len(ast.scopes)-1]
 }
 
-func (sc *Scope) Search(name string) Def {
-	for _, def := range sc.Defs {
-		if def.DefName() == name {
-			return def
-		}
+func (sc *Scope) Search(id string) Def {
+	if def, found := sc.Defs[id]; found {
+		return def
 	}
-
 	if sc.Owner != nil {
-		return sc.Owner.Search(name)
+		return sc.Owner.Search(id)
 	}
 	return nil
 }
 
-func (sc *Scope) Define(def Def) {
-	sc.Defs = append(sc.Defs, def)
+func (sc *Scope) Add(def Def) {
+	sc.Defs[def.Id()] = def
 }

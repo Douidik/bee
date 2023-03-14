@@ -2,6 +2,6 @@ package main
 
 type Token struct {
 	Expr  string
-	Trait uint
+	Trait Trait
 	Ok    bool
 }

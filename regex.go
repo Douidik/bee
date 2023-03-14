@@ -412,7 +412,7 @@ func (p *parser) parseSet(str string) (*node, error) {
 	return newNode(newSet(str)), nil
 }
 
-// NOTE: Cannot because of initialization cycle error, maybe come up with a solution later
+// NOTE: Cannot because of initialization cycle error, may come up with a solution later
 
 // var scopeFormat = NewRegex("'['? ^ '-' ^ ']'")
 
@@ -635,7 +635,7 @@ func (rg *RegexGraph) Document() string {
 }
 
 func (rg *RegexGraph) define(n *node) {
-	var shape string
+	shape := "?"
 	if n.Branch() {
 		shape = "square"
 	} else {
@@ -668,25 +668,19 @@ func (rg *RegexGraph) formatSubgraph(n *node, header string) {
 	}
 }
 
-func (rg *RegexGraph) formatNode(n *node) {
-	rg.define(n)
-	for _, edge := range n.edges {
-		rg.connect(n, edge)
-	}
-}
-
 func (rg *RegexGraph) format(n *node) {
 	s := n.state
 
 	switch s.Tag {
-	case none:
-		return
 	case not:
 		rg.formatSubgraph(n, `style=filled;bgcolor="#FBF3F3"`)
 	case dash:
 		rg.formatSubgraph(n, `style=filled;bgcolor="#F4FDFF"`)
 	default:
-		rg.formatNode(n)
+		rg.define(n)
+		for _, edge := range n.edges {
+			rg.connect(n, edge)
+		}
 	}
 }
 
