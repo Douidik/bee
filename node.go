@@ -15,6 +15,7 @@ func Writef(w io.Writer, f string, args ...any) {
 }
 
 type Node interface {
+	Result() Type
 	// Dump(w io.Writer, depth uint)
 	// Graph(w io.Writer)
 	// 	Asm_x86(ctx *Asm_x86)
@@ -34,14 +35,12 @@ type Def interface {
 
 type Var struct {
 	Name string
+	Type Type
 }
 
-// Language type primitive, cannot be de-constructed into simpler types.
-// Signedness and size are used to choose the correct CPU Instruction
-type Atom struct {
-	Name   string
-	Size   uint
-	Signed bool
+type Typedef struct {
+	Name string
+	Type Type
 }
 
 type Fn struct {
@@ -50,16 +49,16 @@ type Fn struct {
 	Params []*Var
 }
 
-func (v *Var) Id() string {
+func (v Var) Id() string {
 	return v.Name
 }
 
-func (fn *Fn) Id() string {
+func (fn Fn) Id() string {
 	return fn.Name
 }
 
-func (atom *Atom) Id() string {
-	return atom.Name
+func (td Typedef) Id() string {
+	return td.Name
 }
 
 type Reference struct {
@@ -88,21 +87,26 @@ type InvokeExpr struct {
 
 type Cast struct {
 	Operand Node
+	Type    Type
 }
 
-type Nested struct {
+type Nest struct {
 	Body []Node
 }
 
+type Compound struct {
+	Scope *Scope
+	Body  []Node
+}
+
 type IntExpr struct {
-	Value  uint64
-	Size   uint
-	Signed bool
+	Value uint64
+	Type  Atom
 }
 
 type FloatExpr struct {
 	Value float64
-	Size  uint
+	Type  Atom
 }
 
 type StrExpr struct {
@@ -114,14 +118,95 @@ type CharExpr struct {
 }
 
 type If struct {
-	Conds []Node
-	Body  []Node
-	Else  []Node
+	Conds Compound
+	If    Compound
+	Else  Compound
 }
-type For If
+
+type For struct {
+	Conds Compound
+	Body  Compound
+}
 
 type DefineExpr struct {
 	Def  Def
 	Expr Node
 }
 type DeclareExpr DefineExpr
+
+func (ref Reference) Result() Type {
+	switch def := ref.Def.(type) {
+	case Typedef:
+		return def.Type
+	case Var:
+		return def.Type
+	default:
+		return Void{}
+	}
+}
+
+func (un UnaryExpr) Result() Type {
+	return un.Operand.Result()
+}
+
+func (bin BinaryExpr) Result() Type {
+	return bin.Operands[0].Result()
+}
+
+func (ind IndexExpr) Result() Type {
+	return ind.Operand.Result()
+}
+
+func (inv InvokeExpr) Result() Type {
+	return inv.Operand.Return.Type
+}
+
+func (cast Cast) Result() Type {
+	return cast.Type
+}
+
+func (nest Nest) Result() Type {
+	if len(nest.Body) != 0 {
+		return nest.Body[len(nest.Body)-1].Result()
+	}
+	return Void{}
+}
+
+func (int IntExpr) Result() Type {
+	return int.Type
+}
+
+func (fl FloatExpr) Result() Type {
+	return fl.Type
+}
+
+func (str StrExpr) Result() Type {
+	return Void{}
+}
+
+func (char CharExpr) Result() Type {
+	return Atom{size: 8, signed: true}
+}
+
+func (i If) Result() Type {
+	return i.If.Result()
+}
+
+func (f For) Result() Type {
+	return f.Body.Result()
+}
+
+func (cd Compound) Result() Type {
+	if len(cd.Body) != 0 {
+		return cd.Body[len(cd.Body)-1].Result()
+	}
+	return Void{}
+}
+
+func (decl DeclareExpr) Result() Type {
+	return decl.Expr.Result()
+}
+
+func (def DefineExpr) Result() Type {
+	return def.Expr.Result()
+}

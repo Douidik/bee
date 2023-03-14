@@ -1,9 +1,5 @@
 package main
 
-import (
-	"fmt"
-)
-
 type Pattern struct {
 	Trait Trait
 	Regex Regex
@@ -15,8 +11,7 @@ func NewBeeSyntax() SyntaxMap {
 	def := func(trait Trait, src string) Pattern {
 		rx, err := NewRegex(src)
 		if err != nil {
-			fmt.Println(err)
-			return Pattern{}
+			panic(err)
 		}
 		return Pattern{trait, rx}
 	}
@@ -24,8 +19,8 @@ func NewBeeSyntax() SyntaxMap {
 	return SyntaxMap{
 		def(NewLine, "'\n'"),
 		def(Blank, `_+`),
-		def(Comment, `'//' {^  ~ '\n'}'`),
-		def(Directive, `'#' {^  ~ '\n'}'`),
+		//def(Comment, `'//' {^  ~ '\n'}'`),
+		//def(Directive, `'#' {^  ~ '\n'}'`),
 
 		def(KwStruct, `'struct'/!a`),
 		def(KwEnum, `'enum'/!a`),

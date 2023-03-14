@@ -2,9 +2,11 @@ package main
 
 import (
 	"fmt"
-	"golang.org/x/exp/slices"
 	"math"
 	"strconv"
+	"strings"
+
+	"golang.org/x/exp/slices"
 )
 
 type Parser struct {
@@ -15,38 +17,46 @@ type Parser struct {
 }
 
 func NewParser(sc Scanner) Parser {
-	return Parser{sn: sc, peekQueue: make([]Token, 8)}
+	return Parser{sn: sc, peekQueue: make([]Token, 0)}
 }
 
 func (ps *Parser) Parse() (*Ast, error) {
 	ps.scope = ps.ast.NewScope(nil)
-	ps.scope.Add(&Atom{Name: "bool", Size: 8, Signed: false})
-	ps.scope.Add(&Atom{Name: "char", Size: 8, Signed: true})
-	ps.scope.Add(&Atom{Name: "s8", Size: 8, Signed: true})
-	ps.scope.Add(&Atom{Name: "s16", Size: 16, Signed: true})
-	ps.scope.Add(&Atom{Name: "s32", Size: 32, Signed: true})
-	ps.scope.Add(&Atom{Name: "s64", Size: 64, Signed: true})
-	ps.scope.Add(&Atom{Name: "u8", Size: 8, Signed: false})
-	ps.scope.Add(&Atom{Name: "u16", Size: 16, Signed: false})
-	ps.scope.Add(&Atom{Name: "u32", Size: 32, Signed: false})
-	ps.scope.Add(&Atom{Name: "u64", Size: 64, Signed: false})
+	ps.scope.Add(&Typedef{Name: "bool", Type: &Atom{size: 8}})
+	ps.scope.Add(&Typedef{Name: "char", Type: &Atom{size: 8, signed: true}})
+	ps.scope.Add(&Typedef{Name: "s8", Type: &Atom{size: 8, signed: true}})
+	ps.scope.Add(&Typedef{Name: "s16", Type: &Atom{size: 16, signed: true}})
+	ps.scope.Add(&Typedef{Name: "s32", Type: &Atom{size: 32, signed: true}})
+	ps.scope.Add(&Typedef{Name: "s64", Type: &Atom{size: 64, signed: true}})
+	ps.scope.Add(&Typedef{Name: "u8", Type: &Atom{size: 8}})
+	ps.scope.Add(&Typedef{Name: "u16", Type: &Atom{size: 16}})
+	ps.scope.Add(&Typedef{Name: "u32", Type: &Atom{size: 32}})
+	ps.scope.Add(&Typedef{Name: "u64", Type: &Atom{size: 64}})
+	ps.scope.Add(&Typedef{Name: "f32", Type: &Atom{size: 32, float: true}})
+	ps.scope.Add(&Typedef{Name: "f64", Type: &Atom{size: 64, float: true}})
 
 	for !ps.sn.Finished() {
-		node, err := ps.parseNode(NewLine, Semicolon)
+		body, err := ps.parseNode(NewLine, Eof)
 		if err != nil {
 			return nil, err
 		}
-		ps.ast.Body = append(ps.ast.Body, node)
+		ps.ast.Body = append(ps.ast.Body, body...)
 	}
 	return &ps.ast, nil
 }
 
-func (ps *Parser) parseNode(delim ...Trait) (Node, error) {
-	body := make([]Node, 8)
+func (ps *Parser) parseNode(delim, end Trait) ([]Node, error) {
+	body := make([]Node, 0)
 	var prev Node = nil
-	var end Token
+	var tok Token
 
-	for !end.Ok && !ps.sn.Finished() {
+	for !ps.sn.Finished() {
+		if tok = ps.token(delim); tok.Ok {
+			prev = nil
+		}
+		if tok = ps.token(end); tok.Ok {
+			break
+		}
 		node, err := ps.expectNode(prev)
 		if err != nil {
 			return nil, err
@@ -59,39 +69,74 @@ func (ps *Parser) parseNode(delim ...Trait) (Node, error) {
 		}
 	}
 
-	if !end.Ok {
-		expected := make([]byte, 0)
-		for i := 0; i < len(delim); i++ {
-			if i < len(delim)-1 {
-				expected = fmt.Appendf(expected, "%s, ", BeeTraitName(delim[i]))
-			} else {
-				expected = fmt.Appendf(expected, "%s", BeeTraitName(delim[i]))
-			}
-		}
-		ps.errorf(end, "Expected <%s>", expected)
+	if !tok.Ok {
+		return nil, ps.errorf(tok, "Expected <%s> got <%s>", end.Repr(), tok.Trait.Repr())
 	}
 
-	switch len(body) {
-	case 0:
-		return nil, nil
-	case 1:
-		return body[0], nil
-	default:
-		return Nested{body}, nil
-	}
+	return body, nil
 }
 
 func (ps *Parser) expectNode(prev Node) (Node, error) {
 	for ps.token(NewLine).Ok {
-		// allow new lines during if node not finished to parse
+		// Ignore new line when expecting a node
+	}
+
+	if ps.token(KwIf).Ok {
+		var (
+			i   If
+			err error
+		)
+		if i.Conds, err = ps.parseCompound(NewLine, ScopeBegin); err != nil {
+			return nil, err
+		}
+		if i.If, err = ps.parseCompound(NewLine, ScopeEnd); err != nil {
+			return nil, err
+		}
+		if ps.token(KwElse).Ok {
+			if i.Else, err = ps.parseCompound(NewLine, ScopeEnd); err != nil {
+				return nil, err
+			}
+		}
+		return i, nil
+	}
+
+	if ps.token(KwFor).Ok {
+		var (
+			f   For
+			err error
+		)
+		if f.Conds, err = ps.parseCompound(NewLine, ScopeBegin); err != nil {
+			return nil, err
+		}
+		if f.Body, err = ps.parseCompound(NewLine, ScopeEnd); err != nil {
+			return nil, err
+		}
+		return f, nil
 	}
 
 	if id := ps.token(Identifier); id.Ok {
 		def := ps.scope.Search(id.Expr)
 		if def != nil {
-			return Reference{def}, nil
+			return Reference{Def: def}, nil
 		}
-		if operator := ps.token(Define, Define); operator.Ok {
+
+		if cast, isCast := def.(Type); isCast && ps.token(ParenBegin).Ok {
+			body, err := ps.parseNode(NewLine, ParenEnd)
+			if err != nil {
+				return nil, err
+			}
+			switch {
+			case len(body) == 0:
+				return nil, ps.errorf(id, "Expected expression in '%s' casting parenthesis", id.Expr)
+			case len(body) > 1:
+				return nil, ps.errorf(id, "Extraneous expressions in '%s' casting parenthesis", id.Expr)
+			case !body[0].Result().Infers(cast):
+				return nil, ps.errorf(id, "Cannot cast expression to type '%s'", id.Expr)
+			}
+			return Cast{body[0], cast}, nil
+		}
+
+		if operator := ps.token(Define, Declare); operator.Ok {
 			expr, err := ps.expectNode(nil)
 			if err != nil {
 				return nil, err
@@ -99,10 +144,12 @@ func (ps *Parser) expectNode(prev Node) (Node, error) {
 			if expr == nil {
 				return nil, ps.errorf(operator, "No value given to '%s'", id.Expr)
 			}
-			def = ps.scope.Add()
+			def = ps.scope.Add(&Var{Name: id.Expr, Type: expr.Result()})
 			switch operator.Trait {
 			case Define:
-				return DefineExpr{
+				return DefineExpr{def, expr}, nil
+			case Declare:
+				return DeclareExpr{def, expr}, nil
 			}
 		}
 		return nil, ps.errorf(id, "Use of undeclared identifier")
@@ -141,7 +188,7 @@ func (ps *Parser) expectNode(prev Node) (Node, error) {
 		} else {
 			size = 32
 		}
-		return IntExpr{uint64(n), size, true}, err
+		return IntExpr{uint64(n), Atom{size: size, signed: true}}, err
 	}
 
 	if float := ps.token(Float); float.Ok {
@@ -153,7 +200,7 @@ func (ps *Parser) expectNode(prev Node) (Node, error) {
 		} else {
 			size = 32
 		}
-		return FloatExpr{f, size}, err
+		return FloatExpr{float64(f), Atom{size: size, float: true}}, err
 	}
 
 	if char := ps.token(Char); char.Ok {
@@ -192,6 +239,9 @@ func (ps *Parser) expectNode(prev Node) (Node, error) {
 		if next == nil {
 			return nil, ps.errorf(bin, `Missing post-operand for binary expression`)
 		}
+		if !prev.Result().Infers(next.Result()) {
+			return nil, ps.errorf(bin, `Incompatible operands in binary expression`)
+		}
 		return BinaryExpr{[2]Node{prev, next}, bin}, nil
 	}
 
@@ -210,253 +260,26 @@ func (ps *Parser) expectNode(prev Node) (Node, error) {
 		}
 	}
 
-	if paren := ps.token(ParenBegin); paren.Ok {
-		node, err := ps.parseNode(ParenEnd)
-		if err != nil {
-			return nil, err
-		}
-		switch node.(type) {
-		case nil:
-			return nil, nil
-		case Nested:
-			return node.(Nested), err
-		default:
-			return Nested{Body: []Node{node}}, err
-		}
+	if ps.token(ScopeBegin).Ok {
+		return ps.parseCompound(NewLine, ScopeEnd)
 	}
+
+	if ps.token(ParenBegin).Ok {
+		body, err := ps.parseNode(NewLine, ParenEnd)
+		return Nest{body}, err
+	}
+
 	return nil, nil
 }
 
-// func (ps *Parser) parseStmt() (Node, error) {
-// 	switch peek := ps.peekTok(); peek.Trait {
-// 	case KwIf:
-// 	case KwFor:
-// 	case KwReturn:
-// 		break
+func (ps *Parser) parseCompound(delim, end Trait) (Compound, error) {
+	ps.scope = &Scope{Defs: map[string]Def{}, Owner: ps.scope}
+	body, err := ps.parseNode(delim, end)
+	compound := Compound{Scope: ps.scope, Body: body}
+	ps.scope = ps.scope.Owner
+	return compound, err
 
-// 	case Identifier:
-// 		id := ps.expectTok(Identifier)
-// 		op := ps.maybeTok(Define, Declare)
-// 		if !op.Ok {
-// 			break
-// 		}
-
-// 		if ps.maybeTok(KwFn).Ok {
-
-// 		}
-
-// 		if ps.maybeTok(Define).Ok {
-// 			return DefineStmt{ps.scope.Add(id), expr}, err
-// 		} else if ps.maybeTok(Declare).Ok {
-
-// 		}
-// 	}
-
-// 	expr, err := ps.parseExpr(NewLine)
-// 	return ExprStmt{expr}, err
-
-// 	// switch peek := p.peekTok(); peek.Trait {
-// 	// case Identifier:
-// 	// 	name := p.expectTok(Identifier)
-// 	// 	op := p.expectTok(Define, Declare)
-
-// 	// 	if !op.Ok {
-// 	// 		return nil, p.errorf(op, `Expected operator '::' or ':' after identifier`)
-// 	// 	}
-
-// 	// 	// def, err := p.parseDef(name)
-// 	// 	// if err != nil {
-// 	// 	// 	return nil, err
-// 	// 	// }
-
-// 	// 	switch op.Trait {
-// 	// 	case Declare:
-
-// 	// 	case Define:
-
-// 	// 	}
-// 	// }
-
-// 	return nil, nil
-// }
-
-// // func (p *Parser) parseDef(name Token) (Node, error) {
-// // 	if tok := p.maybeTok(ParenBegin); tok.Ok {
-// // 	}
-
-// // 	if tok := p.maybeTok(Identifier); tok.Ok {
-// // 		def := p.scope.Search(tok.Expr)
-// // 		if def == nil {
-// // 			return nil, p.errorf(tok, `Unknown name`)
-// // 		}
-
-// // 	}
-// // }
-
-// func (ps *Parser) parseExpr(stop uint) (Node, error) {
-// 	nested := NestedExpr{}
-// 	var prev Node = nil
-// 	var end Token
-
-// 	for {
-// 		if ps.maybeTok(stop, End).Ok {
-// 			break
-// 		}
-
-// 		expr, err := ps.parseNextExpr(prev)
-// 		if err != nil {
-// 			return nil, err
-// 		}
-// 		if expr != nil {
-// 			nested.Body = append(nested.Body, expr)
-// 		} else {
-// 			break
-// 		}
-// 		prev = expr
-// 	}
-
-// 	if end.Trait != stop {
-// 		return nil, ps.errorf(end, `Unexpected end of source during expression parsing`)
-// 	}
-
-// 	switch len(nested.Body) {
-// 	case 0:
-// 		return nil, nil
-// 	case 1:
-// 		return nested.Body[0], nil
-// 	default:
-// 		return nested, nil
-// 	}
-// }
-
-// func (ps *Parser) parseNextExpr(prev Node) (Node, error) {
-// 	if id := ps.maybeTok(Identifier); id.Ok {
-// 		def := ps.scope.Search(id.Expr)
-// 		if def == nil {
-// 			return nil, ps.errorf(id, `Unknown name`)
-// 		}
-
-// 		return IdExpr{def}, nil
-// 	}
-
-// 	if str := ps.maybeTok(RawStr, Str); str.Ok {
-// 		var content string
-
-// 		switch str.Trait {
-// 		case RawStr:
-// 			content = str.Expr[1 : len(str.Expr)-1]
-// 		case Str:
-// 			content = UnescapeStr(str.Expr[1 : len(str.Expr)-1])
-// 		}
-
-// 		return StrExpr{content}, nil
-// 	}
-
-// 	// Integers and floats constants infers to 32-64 bits depending on the size
-// 	// Must have an explicit cast in order to access smaller parts of the register
-
-// 	if int := ps.maybeTok(IntDec, IntBin, IntHex); int.Ok {
-// 		var (
-// 			n    int64
-// 			err  error
-// 			size uint
-// 		)
-
-// 		switch int.Trait {
-// 		case IntDec:
-// 			n, err = strconv.ParseInt(int.Expr[:], 10, 64)
-// 		case IntBin:
-// 			n, err = strconv.ParseInt(int.Expr[2:], 2, 64)
-// 		case IntHex:
-// 			n, err = strconv.ParseInt(int.Expr[2:], 16, 64)
-// 		}
-
-// 		if n > math.MaxInt32 {
-// 			size = 64
-// 		} else {
-// 			size = 32
-// 		}
-
-// 		return IntExpr{n, size}, err
-// 	}
-
-// 	if float := ps.maybeTok(Float); float.Ok {
-// 		f, err := strconv.ParseFloat(float.Expr, 64)
-
-// 		var size uint
-// 		if f > math.MaxFloat32 {
-// 			size = 64
-// 		} else {
-// 			size = 32
-// 		}
-
-// 		return FloatExpr{f, size}, err
-// 	}
-
-// 	// Implementation doesn't support multibyte character constants !
-// 	if char := ps.maybeTok(Char); char.Ok {
-// 		content := UnescapeStr(char.Expr[1 : len(char.Expr)-1])
-// 		switch len(content) {
-// 		case 0:
-// 			return nil, ps.errorf(char, `Empty character constant`)
-// 		case 1:
-// 			return CharExpr{content[0]}, nil
-// 		default:
-// 			return nil, ps.errorf(char, `Character constant too long`)
-// 		}
-// 	}
-
-// 	if sign := ps.maybeTok(Add, Sub); sign.Ok && prev == nil {
-// 		expr, err := ps.parseNextExpr(nil)
-// 		if err != nil {
-// 			return nil, err
-// 		}
-
-// 		return UnaryExpr{OrderPrev, expr, sign}, nil
-// 	}
-
-// 	if binaryOp := ps.maybeTok(
-// 		Assign,
-// 		KwAnd, KwOr,
-// 		Add, Sub, Mul, Div, Mod,
-// 		BinNot, BinAnd, BinOr, BinXor, BinShiftL, BinShiftR,
-// 		Equal, NotEq, Less, Greater, LessEq, GreaterEq); binaryOp.Ok {
-// 		if prev == nil {
-// 			return nil, ps.errorf(binaryOp, `Missing pre-operand for binary expression`)
-// 		}
-// 		next, err := ps.parseNextExpr(nil)
-// 		if err != nil {
-// 			return nil, err
-// 		}
-// 		if next == nil {
-// 			return nil, ps.errorf(binaryOp, `Missing post-operand for binary expression`)
-// 		}
-
-// 		return BinaryExpr{prev, next, binaryOp}, nil
-// 	}
-
-// 	if incrementOp := ps.maybeTok(Increment, Decrement); incrementOp.Ok {
-// 		if prev != nil {
-// 			return UnaryExpr{OrderPost, prev, incrementOp}, nil
-// 		} else {
-// 			next, err := ps.parseNextExpr(nil)
-// 			if err != nil {
-// 				return nil, err
-// 			}
-// 			if next == nil {
-// 				return nil, ps.errorf(incrementOp, `Missing expression for increment`)
-// 			}
-// 			return UnaryExpr{OrderPrev, next, incrementOp}, nil
-// 		}
-// 	}
-
-// 	if paren := ps.maybeTok(ParenBegin); paren.Ok {
-// 		expr, err := ps.parseExpr(')')
-// 		return NestedExpr{Body: []Node{expr}}, err
-// 	}
-
-// 	return nil, nil
-// }
+}
 
 func (ps *Parser) peek() Token {
 	tok := ps.sn.Tokenize()
@@ -480,5 +303,28 @@ func (ps *Parser) token(traits ...Trait) Token {
 }
 
 func (ps *Parser) errorf(tok Token, f string, args ...any) error {
+	var (
+		src = ps.sn.src
+		begin int
+		end int
+		count int
+	)
+	
+	if begin = strings.IndexByte(src[:tok.Index], "\n"); begin < 0 {
+		begin = 0
+	}
+	if end = strings.IndexByte(src[tok.Index:], "\n"); end < 0 {
+		
+	}
+	count := strings.Count(src[:begin], "\n")
+	
+		
+	line := ps.sn.src[tok.Index:]
+	line, _, _ = strings.Cut(line, "\n")
+	lineNum := strings.Count(line, "\n"
+	
+	_, line, _ = strings.Cut(line, "\n")
+	
+	
 	return fmt.Errorf(f, args...)
 }

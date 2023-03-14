@@ -25,6 +25,7 @@ func (sc *Scope) Search(id string) Def {
 	return nil
 }
 
-func (sc *Scope) Add(def Def) {
+func (sc *Scope) Add(def Def) Def {
 	sc.Defs[def.Id()] = def
+	return def
 }

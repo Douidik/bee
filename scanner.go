@@ -26,17 +26,18 @@ func (sn *Scanner) Tokenize() Token {
 
 func (sn *Scanner) match() Token {
 	if sn.Finished() {
-		return Token{sn.src[len(sn.src)-1:], End, false}
+		return Token{len(sn.src) - 1, sn.src[len(sn.src)-1:], Eof, false}
 	}
 
 	for _, pt := range sn.sm {
 		match := pt.Regex.Match(sn.src[sn.cur:])
 		if match != -1 {
-			expr := sn.src[sn.cur : sn.cur+match]
+			index := sn.cur
+			expr := sn.src[index : sn.cur+match]
 			sn.cur += match
-			return Token{expr, pt.Trait, true}
+			return Token{index, expr, pt.Trait, true}
 		}
 	}
 
-	return Token{`<unreachable>`, None, false}
+	return Token{0, `<unreachable>`, None, false}
 }

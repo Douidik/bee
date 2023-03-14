@@ -78,8 +78,8 @@ const (
 	Semicolon
 )
 
-func BeeTraitName(trait Trait) string {
-	switch trait {
+func (t Trait) Repr() string {
+	switch t {
 
 	case NewLine:
 		return "NewLine"

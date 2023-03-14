@@ -16,7 +16,7 @@ func main() {
 
 	src, err := os.ReadFile(args[0])
 	if err != nil {
-		fmt.Println(err)
+		fmt.Println("Scanner: ", err)
 		os.Exit(1)
 	}
 
@@ -24,7 +24,12 @@ func main() {
 	ps := NewParser(sn)
 	ast, err := ps.Parse()
 	if err != nil {
-		fmt.Printf("%v\n", ast)
+		fmt.Println("Parser: ", err)
+		os.Exit(1)
+	}
+
+	for _, node := range ast.Body {
+			fmt.Printf("%v\n", node)
 	}
 }
 
@@ -98,5 +103,5 @@ func main() {
 // }
 
 // func main() {
-// 	fmt.Println("Bee - programming language")
+// 	fmt.Println("Bee")
 // }
