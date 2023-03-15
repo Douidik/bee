@@ -1,19 +1,31 @@
-// No macro
+// std/vec.bee
+mem :: #import "std/mem.bee"
 
-Vec :: struct <T> {
-    data : &[T]
-    size : u64
+new :: fn (T!, cap: s64) -> &[T!] {
+    return &[mem.heap(#size(T!) * cap); cap; 0]
 }
 
-vec_new :: <T> (size : u64) -> Vec<T> {
-
+from :: fn (T!, source: &[T!]) -> &[T!] {
+    vec : new(T! : T!, source.len())
+    mem.copy(vec, source, vec.len())
+    return vec
 }
 
-vec_from :: <T> (f : &[T]) -> Vec<T> {
-    vec : vec_new(f.size())
-    Mem.move<T>(vec.data, f)
+push :: fn (T!, $: &[T!], item: &T!) -> &T! {
+    if len() + 1 > cap() {
+    }
 }
 
-push :: <T> ($ : Vec<T>, pushed : T) {
-    
+expand :: fn (T!, $: &[T!], cap: u64) -> u64 {
+    if cap > cap {
+        return $.cap
+    }
+    vec : new(T!: T!, 
+}
+
+// main.bee
+vec :: #import "std/vec.bee"
+
+main :: fn (argc : u32, argv : [&[char]]) -> u32 {
+    ints: vec.new(T!: s32, 0)
 }

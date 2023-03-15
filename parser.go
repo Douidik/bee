@@ -10,14 +10,15 @@ import (
 )
 
 type Parser struct {
+	name      string
 	sn        Scanner
 	peekQueue []Token
 	ast       Ast
 	scope     *Scope
 }
 
-func NewParser(sc Scanner) Parser {
-	return Parser{sn: sc, peekQueue: make([]Token, 0)}
+func NewParser(name string, sn Scanner) Parser {
+	return Parser{name: name, sn: sn, peekQueue: make([]Token, 0)}
 }
 
 func (ps *Parser) Parse() (*Ast, error) {
@@ -36,51 +37,45 @@ func (ps *Parser) Parse() (*Ast, error) {
 	ps.scope.Add(&Typedef{Name: "f64", Type: &Atom{size: 64, float: true}})
 
 	for !ps.sn.Finished() {
-		body, err := ps.parseNode(NewLine, Eof)
+		node, err := ps.parseNode(NewLine)
 		if err != nil {
 			return nil, err
 		}
-		ps.ast.Body = append(ps.ast.Body, body...)
+		ps.ast.Body = append(ps.ast.Body, node)
 	}
 	return &ps.ast, nil
 }
 
-func (ps *Parser) parseNode(delim, end Trait) ([]Node, error) {
-	body := make([]Node, 0)
-	var prev Node = nil
-	var tok Token
+func (ps *Parser) parseNode(delim Trait) (Node, error) {
+	var head Node = nil
+	var last Token
 
 	for !ps.sn.Finished() {
-		if tok = ps.token(delim); tok.Ok {
-			prev = nil
-		}
-		if tok = ps.token(end); tok.Ok {
+		if last = ps.token(delim); last.Ok {
 			break
 		}
-		node, err := ps.expectNode(prev)
+		node, err := ps.expectNode(head)
 		if err != nil {
 			return nil, err
 		}
 		if node != nil {
-			body = append(body, node)
-			prev = node
+			head = node
 		} else {
 			break
 		}
 	}
 
-	if !tok.Ok {
-		return nil, ps.errorf(tok, "Expected <%s> got <%s>", end.Repr(), tok.Trait.Repr())
+	if !last.Ok {
+		return nil, ps.errorf(last, "Expected <%s> got <%s>", delim.Repr(), last.Trait.Repr())
 	}
-
-	return body, nil
+	if head != nil {
+		return head, nil
+	} else {
+		return ps.parseNode(delim)
+	}
 }
 
 func (ps *Parser) expectNode(prev Node) (Node, error) {
-	for ps.token(NewLine).Ok {
-		// Ignore new line when expecting a node
-	}
-
 	if ps.token(KwIf).Ok {
 		var (
 			i   If
@@ -120,32 +115,24 @@ func (ps *Parser) expectNode(prev Node) (Node, error) {
 			return Reference{Def: def}, nil
 		}
 
-		if cast, isCast := def.(Type); isCast && ps.token(ParenBegin).Ok {
-			body, err := ps.parseNode(NewLine, ParenEnd)
+		if cast, casted := def.(Type); casted && ps.token(ParenBegin).Ok {
+			node, err := ps.parseNode(ParenEnd)
 			if err != nil {
 				return nil, err
 			}
-			switch {
-			case len(body) == 0:
-				return nil, ps.errorf(id, "Expected expression in '%s' casting parenthesis", id.Expr)
-			case len(body) > 1:
-				return nil, ps.errorf(id, "Extraneous expressions in '%s' casting parenthesis", id.Expr)
-			case !body[0].Result().Infers(cast):
+			if !node.Result().Cast(cast) {
 				return nil, ps.errorf(id, "Cannot cast expression to type '%s'", id.Expr)
 			}
-			return Cast{body[0], cast}, nil
+			return Cast{node, cast}, nil
 		}
 
-		if operator := ps.token(Define, Declare); operator.Ok {
+		if init := ps.token(Define, Declare); init.Ok {
 			expr, err := ps.expectNode(nil)
 			if err != nil {
 				return nil, err
 			}
-			if expr == nil {
-				return nil, ps.errorf(operator, "No value given to '%s'", id.Expr)
-			}
 			def = ps.scope.Add(&Var{Name: id.Expr, Type: expr.Result()})
-			switch operator.Trait {
+			switch init.Trait {
 			case Define:
 				return DefineExpr{def, expr}, nil
 			case Declare:
@@ -215,12 +202,14 @@ func (ps *Parser) expectNode(prev Node) (Node, error) {
 		}
 	}
 
-	if sign := ps.token(Add, Sub); sign.Ok && prev == nil {
-		expr, err := ps.expectNode(nil)
-		if err != nil {
-			return nil, err
+	if prev == nil {
+		if sign := ps.token(Add, Sub); sign.Ok {
+			expr, err := ps.expectNode(nil)
+			if err != nil {
+				return nil, err
+			}
+			return UnaryExpr{OrderPrev, expr, sign}, nil
 		}
-		return UnaryExpr{OrderPrev, expr, sign}, nil
 	}
 
 	if bin := ps.token(
@@ -239,7 +228,7 @@ func (ps *Parser) expectNode(prev Node) (Node, error) {
 		if next == nil {
 			return nil, ps.errorf(bin, `Missing post-operand for binary expression`)
 		}
-		if !prev.Result().Infers(next.Result()) {
+		if !prev.Result().Cast(next.Result()) {
 			return nil, ps.errorf(bin, `Incompatible operands in binary expression`)
 		}
 		return BinaryExpr{[2]Node{prev, next}, bin}, nil
@@ -265,8 +254,16 @@ func (ps *Parser) expectNode(prev Node) (Node, error) {
 	}
 
 	if ps.token(ParenBegin).Ok {
-		body, err := ps.parseNode(NewLine, ParenEnd)
-		return Nest{body}, err
+		nest := Nest{Body: make([]Node, 0)}
+
+		for !ps.sn.Finished() && !ps.token(ParenEnd).Ok {
+			node, err := ps.parseNode(Comma)
+			if err != nil {
+				return nest, err
+			}
+			nest.Body = append(nest.Body, node)
+		}
+		return nest, nil
 	}
 
 	return nil, nil
@@ -274,17 +271,18 @@ func (ps *Parser) expectNode(prev Node) (Node, error) {
 
 func (ps *Parser) parseCompound(delim, end Trait) (Compound, error) {
 	ps.scope = &Scope{Defs: map[string]Def{}, Owner: ps.scope}
-	body, err := ps.parseNode(delim, end)
-	compound := Compound{Scope: ps.scope, Body: body}
+	compound := Compound{Scope: ps.scope, Body: make([]Node, 0)}
+
+	for !ps.sn.Finished() && !ps.token(end).Ok {
+		node, err := ps.parseNode(delim)
+		if err != nil {
+			return compound, err
+		}
+		compound.Body = append(compound.Body, node)
+	}
+
 	ps.scope = ps.scope.Owner
-	return compound, err
-
-}
-
-func (ps *Parser) peek() Token {
-	tok := ps.sn.Tokenize()
-	ps.peekQueue = append(ps.peekQueue, tok)
-	return tok
+	return compound, nil
 }
 
 func (ps *Parser) token(traits ...Trait) Token {
@@ -302,29 +300,63 @@ func (ps *Parser) token(traits ...Trait) Token {
 	return tok
 }
 
+//	Example: from 'basic.bee':24 > foo :: fn () -> {
+//	                                               ^ Function return type expected in signature after '->'
+
 func (ps *Parser) errorf(tok Token, f string, args ...any) error {
-	var (
-		src = ps.sn.src
-		begin int
-		end int
-		count int
-	)
-	
-	if begin = strings.IndexByte(src[:tok.Index], "\n"); begin < 0 {
-		begin = 0
+	trim := func(str string, index, end int) int {
+		step := func(a, b int) int {
+			d := b - a
+			if d > 0 {
+				return +1
+			} else {
+				return -1
+			}
+		}
+		// Search new line in the str[index : end] interval
+		newLine := index
+		for newLine != end && str[newLine] != '\n' {
+			newLine += step(index, end)
+		}
+		// Search first non-blank character in the str[newLine : index] interval
+		begin := newLine
+		for begin != index && strings.IndexByte(" \t\n\v\f\r", str[begin]) != -1 {
+			begin += step(newLine, index)
+		}
+		return begin
 	}
-	if end = strings.IndexByte(src[tok.Index:], "\n"); end < 0 {
-		
-	}
-	count := strings.Count(src[:begin], "\n")
-	
-		
-	line := ps.sn.src[tok.Index:]
-	line, _, _ = strings.Cut(line, "\n")
-	lineNum := strings.Count(line, "\n"
-	
-	_, line, _ = strings.Cut(line, "\n")
-	
-	
-	return fmt.Errorf(f, args...)
+
+	// todo: trim function not required, just take a slice and rebase the index
+	src := ps.sn.src
+	begin := trim(src, tok.Index, 0)
+	end := begin + strings.IndexByte(src[begin:], '\n')
+	line := 1 + strings.Count(src[:begin], "\n")
+	location := fmt.Sprintf("from '%s':%d > ", ps.name, line)
+	snippet := src[begin:end]
+	cursor := len(location) + (tok.Index - begin + 1)
+	reason := fmt.Sprintf(f, args...)
+	return fmt.Errorf("%s%s\n%*c %s", location, snippet, cursor, '^', reason)
 }
+
+// func (ps *Parser) errorf(tok Token, f string, args ...any) error {
+// 	var (
+// 		src   = ps.sn.src
+// 		begin int
+// 		end   int
+// 		line  int
+// 	)
+
+// 	if begin = strings.LastIndexByte(src[:tok.Index], '\n'); begin < 0 {
+// 		begin = 0
+// 	}
+// 	if end = strings.IndexByte(src[:tok.Index], '\n'); end < 0 {
+// 		end = len(src)
+// 	}
+// 	line = strings.Count(src[:begin], "\n")
+
+// 	location := fmt.Sprintf("%s:%d > ", ps.name, line)
+// 	snippet := strings.Trim(src[begin:end], " \t\n\v\f\r")
+// 	offset := len(location) + (tok.Index - begin + 1)
+// 	reason := fmt.Sprintf(f, args...)
+// 	return fmt.Errorf("%s%s\n%*c %s", location, snippet, offset, '^', reason)
+// }

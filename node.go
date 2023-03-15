@@ -16,10 +16,38 @@ func Writef(w io.Writer, f string, args ...any) {
 
 type Node interface {
 	Result() Type
+
 	// Dump(w io.Writer, depth uint)
 	// Graph(w io.Writer)
 	// 	Asm_x86(ctx *Asm_x86)
 	// 	Asm_6502(ctx *Asm_6502)
+}
+
+func Precedence(n Node) uint {
+	switch n.(type) {
+	case UnaryExpr:
+		switch n.(UnaryExpr).Order {
+		case OrderPrev:
+			return 0
+		case OrderPost:
+			return 1
+		}
+	case InvokeExpr, IndexExpr:
+		return 0
+	case BinaryExpr:
+		switch n.(BinaryExpr).Operator.Trait {
+		case Mul, Div, Mod, BinShiftL, BinShiftR, BinAnd:
+			return 1
+		case Add, Sub, BinOr, BinXor, BinNot:
+			return 2
+		case Equal, NotEq, Less, LessEq, Greater, GreaterEq:
+			return 3
+		case KwAnd:
+			return 4
+		case KwOr:
+			return 5
+		}
+	}
 }
 
 type Order uint
@@ -29,60 +57,8 @@ const (
 	OrderPost Order = 1
 )
 
-type Def interface {
-	Id() string
-}
-
-type Var struct {
-	Name string
-	Type Type
-}
-
-type Typedef struct {
-	Name string
-	Type Type
-}
-
-type Fn struct {
-	Name   string
-	Return *Var
-	Params []*Var
-}
-
-func (v Var) Id() string {
-	return v.Name
-}
-
-func (fn Fn) Id() string {
-	return fn.Name
-}
-
-func (td Typedef) Id() string {
-	return td.Name
-}
-
 type Reference struct {
 	Def Def
-}
-
-type UnaryExpr struct {
-	Order    Order
-	Operand  Node
-	Operator Token
-}
-
-type BinaryExpr struct {
-	Operands [2]Node
-	Operator Token
-}
-
-type IndexExpr struct {
-	Operand Node
-}
-
-type InvokeExpr struct {
-	Operand *Fn
-	Args    []*Var
 }
 
 type Cast struct {
@@ -99,24 +75,6 @@ type Compound struct {
 	Body  []Node
 }
 
-type IntExpr struct {
-	Value uint64
-	Type  Atom
-}
-
-type FloatExpr struct {
-	Value float64
-	Type  Atom
-}
-
-type StrExpr struct {
-	Value string
-}
-
-type CharExpr struct {
-	Value byte
-}
-
 type If struct {
 	Conds Compound
 	If    Compound
@@ -128,37 +86,15 @@ type For struct {
 	Body  Compound
 }
 
-type DefineExpr struct {
-	Def  Def
-	Expr Node
-}
-type DeclareExpr DefineExpr
-
 func (ref Reference) Result() Type {
 	switch def := ref.Def.(type) {
-	case Typedef:
+	case *Typedef:
 		return def.Type
-	case Var:
+	case *Var:
 		return def.Type
 	default:
 		return Void{}
 	}
-}
-
-func (un UnaryExpr) Result() Type {
-	return un.Operand.Result()
-}
-
-func (bin BinaryExpr) Result() Type {
-	return bin.Operands[0].Result()
-}
-
-func (ind IndexExpr) Result() Type {
-	return ind.Operand.Result()
-}
-
-func (inv InvokeExpr) Result() Type {
-	return inv.Operand.Return.Type
 }
 
 func (cast Cast) Result() Type {
@@ -172,22 +108,6 @@ func (nest Nest) Result() Type {
 	return Void{}
 }
 
-func (int IntExpr) Result() Type {
-	return int.Type
-}
-
-func (fl FloatExpr) Result() Type {
-	return fl.Type
-}
-
-func (str StrExpr) Result() Type {
-	return Void{}
-}
-
-func (char CharExpr) Result() Type {
-	return Atom{size: 8, signed: true}
-}
-
 func (i If) Result() Type {
 	return i.If.Result()
 }
@@ -196,17 +116,9 @@ func (f For) Result() Type {
 	return f.Body.Result()
 }
 
-func (cd Compound) Result() Type {
-	if len(cd.Body) != 0 {
-		return cd.Body[len(cd.Body)-1].Result()
+func (comp Compound) Result() Type {
+	if len(comp.Body) != 0 {
+		return comp.Body[len(comp.Body)-1].Result()
 	}
 	return Void{}
-}
-
-func (decl DeclareExpr) Result() Type {
-	return decl.Expr.Result()
-}
-
-func (def DefineExpr) Result() Type {
-	return def.Expr.Result()
 }

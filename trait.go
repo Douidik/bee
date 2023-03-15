@@ -78,8 +78,8 @@ const (
 	Semicolon
 )
 
-func (t Trait) Repr() string {
-	switch t {
+func (trait Trait) Repr() string {
+	switch trait {
 
 	case NewLine:
 		return "NewLine"

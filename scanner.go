@@ -1,9 +1,9 @@
 package main
 
 type Scanner struct {
-	src string
-	cur int
-	sm  SyntaxMap
+	src  string
+	cur  int
+	smap SyntaxMap
 }
 
 func NewScanner(src string, sm SyntaxMap) Scanner {
@@ -29,7 +29,7 @@ func (sn *Scanner) match() Token {
 		return Token{len(sn.src) - 1, sn.src[len(sn.src)-1:], Eof, false}
 	}
 
-	for _, pt := range sn.sm {
+	for _, pt := range sn.smap {
 		match := pt.Regex.Match(sn.src[sn.cur:])
 		if match != -1 {
 			index := sn.cur

@@ -4,7 +4,7 @@ import "golang.org/x/exp/slices"
 
 type Type interface {
 	Size() uint
-	Infers(to Type) bool
+	Cast(as Type) bool
 }
 
 // Language type primitive, cannot be de-constructed into simpler types.
@@ -25,8 +25,8 @@ func (at Atom) Size() uint {
 	return at.size
 }
 
-func (at Atom) Infers(to Type) bool {
-	_, same := to.(Atom)
+func (at Atom) Cast(as Type) bool {
+	_, same := as.(Atom)
 	return same
 }
 
@@ -38,12 +38,12 @@ func (s Struct) Size() uint {
 	return size
 }
 
-func (s Struct) Infers(to Type) bool {
-	if sto, same := to.(Struct); same {
-		equals := func(a, b Var) bool {
+func (s Struct) Cast(as Type) bool {
+	if as, same := as.(Struct); same {
+		eq := func(a, b Var) bool {
 			return a.Type == b.Type && a.Name == b.Name
 		}
-		return slices.EqualFunc(s.Members, sto.Members, equals)
+		return slices.EqualFunc(s.Members, as.Members, eq)
 	}
 	return false
 }
@@ -52,7 +52,7 @@ func (v Void) Size() uint {
 	return 0
 }
 
-func (v Void) Infers(to Type) bool {
-	_, same := to.(Void)
+func (v Void) Cast(as Type) bool {
+	_, same := as.(Void)
 	return same
 }

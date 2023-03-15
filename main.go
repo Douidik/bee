@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	// "strconv"
@@ -21,16 +22,15 @@ func main() {
 	}
 
 	sn := NewScanner(string(src), NewBeeSyntax())
-	ps := NewParser(sn)
+	ps := NewParser(args[0], sn)
 	ast, err := ps.Parse()
 	if err != nil {
-		fmt.Println("Parser: ", err)
+		fmt.Println(err)
 		os.Exit(1)
 	}
 
-	for _, node := range ast.Body {
-			fmt.Printf("%v\n", node)
-	}
+	astJson, _ := json.MarshalIndent(ast.Body, "", "	")
+	fmt.Println(string(astJson))
 }
 
 // func max(a, b int) int {
