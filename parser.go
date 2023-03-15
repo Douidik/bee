@@ -22,19 +22,20 @@ func NewParser(name string, sn Scanner) Parser {
 }
 
 func (ps *Parser) Parse() (*Ast, error) {
-	ps.scope = ps.ast.NewScope(nil)
-	ps.scope.Add(&Typedef{Name: "bool", Type: &Atom{size: 8}})
-	ps.scope.Add(&Typedef{Name: "char", Type: &Atom{size: 8, signed: true}})
-	ps.scope.Add(&Typedef{Name: "s8", Type: &Atom{size: 8, signed: true}})
-	ps.scope.Add(&Typedef{Name: "s16", Type: &Atom{size: 16, signed: true}})
-	ps.scope.Add(&Typedef{Name: "s32", Type: &Atom{size: 32, signed: true}})
-	ps.scope.Add(&Typedef{Name: "s64", Type: &Atom{size: 64, signed: true}})
-	ps.scope.Add(&Typedef{Name: "u8", Type: &Atom{size: 8}})
-	ps.scope.Add(&Typedef{Name: "u16", Type: &Atom{size: 16}})
-	ps.scope.Add(&Typedef{Name: "u32", Type: &Atom{size: 32}})
-	ps.scope.Add(&Typedef{Name: "u64", Type: &Atom{size: 64}})
-	ps.scope.Add(&Typedef{Name: "f32", Type: &Atom{size: 32, float: true}})
-	ps.scope.Add(&Typedef{Name: "f64", Type: &Atom{size: 64, float: true}})
+	ps.ast.Scope = &Scope{Owner: nil}
+	ps.scope = ps.ast.Scope
+	ps.scope.Add(&Typedef{Name: "bool", Type: &Atom{size: 1}})
+	ps.scope.Add(&Typedef{Name: "char", Type: &Atom{size: 1, signed: true}})
+	ps.scope.Add(&Typedef{Name: "s8", Type: &Atom{size: 1, signed: true}})
+	ps.scope.Add(&Typedef{Name: "s16", Type: &Atom{size: 2, signed: true}})
+	ps.scope.Add(&Typedef{Name: "s32", Type: &Atom{size: 4, signed: true}})
+	ps.scope.Add(&Typedef{Name: "s64", Type: &Atom{size: 8, signed: true}})
+	ps.scope.Add(&Typedef{Name: "u8", Type: &Atom{size: 1}})
+	ps.scope.Add(&Typedef{Name: "u16", Type: &Atom{size: 2}})
+	ps.scope.Add(&Typedef{Name: "u32", Type: &Atom{size: 4}})
+	ps.scope.Add(&Typedef{Name: "u64", Type: &Atom{size: 8}})
+	ps.scope.Add(&Typedef{Name: "f32", Type: &Atom{size: 4, float: true}})
+	ps.scope.Add(&Typedef{Name: "f64", Type: &Atom{size: 8, float: true}})
 
 	for !ps.sn.Finished() {
 		node, err := ps.parseNode(NewLine)
@@ -171,9 +172,9 @@ func (ps *Parser) expectNode(prev Node) (Node, error) {
 		}
 
 		if n > math.MaxInt32 {
-			size = 64
+			size = 8
 		} else {
-			size = 32
+			size = 4
 		}
 		return IntExpr{uint64(n), Atom{size: size, signed: true}}, err
 	}
@@ -183,9 +184,9 @@ func (ps *Parser) expectNode(prev Node) (Node, error) {
 
 		var size uint
 		if f > math.MaxFloat32 {
-			size = 64
+			size = 8
 		} else {
-			size = 32
+			size = 4
 		}
 		return FloatExpr{float64(f), Atom{size: size, float: true}}, err
 	}
@@ -194,11 +195,11 @@ func (ps *Parser) expectNode(prev Node) (Node, error) {
 		content := UnescapeStr(char.Expr[1 : len(char.Expr)-1])
 		switch len(content) {
 		case 0:
-			return nil, ps.errorf(char, `Empty character constant`)
+			return nil, ps.errorf(char, "Empty character constant")
 		case 1:
 			return CharExpr{content[0]}, nil
 		default:
-			return nil, ps.errorf(char, `Character constant too long`)
+			return nil, ps.errorf(char, "Character constant too long")
 		}
 	}
 
@@ -219,17 +220,17 @@ func (ps *Parser) expectNode(prev Node) (Node, error) {
 		BinNot, BinAnd, BinOr, BinXor, BinShiftL, BinShiftR,
 		Equal, NotEq, Less, Greater, LessEq, GreaterEq); bin.Ok {
 		if prev == nil {
-			return nil, ps.errorf(bin, `Missing pre-operand for binary expression`)
+			return nil, ps.errorf(bin, "Missing pre-operand for binary expression")
 		}
 		next, err := ps.expectNode(nil)
 		if err != nil {
 			return nil, err
 		}
 		if next == nil {
-			return nil, ps.errorf(bin, `Missing post-operand for binary expression`)
+			return nil, ps.errorf(bin, "Missing post-operand for binary expression")
 		}
 		if !prev.Result().Cast(next.Result()) {
-			return nil, ps.errorf(bin, `Incompatible operands in binary expression`)
+			return nil, ps.errorf(bin, "Incompatible operands in binary expression")
 		}
 		return BinaryExpr{[2]Node{prev, next}, bin}, nil
 	}
@@ -243,7 +244,7 @@ func (ps *Parser) expectNode(prev Node) (Node, error) {
 				return nil, err
 			}
 			if next == nil {
-				return nil, ps.errorf(incr, `Missing expression for increment`)
+				return nil, ps.errorf(incr, "Missing expression for increment")
 			}
 			return UnaryExpr{OrderPrev, next, incr}, nil
 		}

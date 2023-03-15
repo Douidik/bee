@@ -31,5 +31,9 @@ func (str StrExpr) Result() Type {
 }
 
 func (char CharExpr) Result() Type {
-	return Atom{size: 8, signed: true}
+	return Atom{size: 1, signed: true}
+}
+
+func (int IntExpr) Asm_x86(asm *Asm_x86) {
+	asm.Writef("push %x")
 }

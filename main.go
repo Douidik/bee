@@ -31,6 +31,9 @@ func main() {
 
 	astJson, _ := json.MarshalIndent(ast.Body, "", "	")
 	fmt.Println(string(astJson))
+
+	asm := ast.Asm_x86()
+	fmt.Println(asm.Stream.String())
 }
 
 // func max(a, b int) int {

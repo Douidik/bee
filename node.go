@@ -1,32 +1,18 @@
 package main
 
-import (
-	"fmt"
-	"io"
-)
-
-type Asm_x86 struct{}
-type Asm_6502 struct{}
-
-func Writef(w io.Writer, f string, args ...any) {
-	str := fmt.Sprintf(f, args...)
-	w.Write([]byte(str))
-	w.Write([]byte{'\n'})
-}
-
 type Node interface {
 	Result() Type
 
 	// Dump(w io.Writer, depth uint)
 	// Graph(w io.Writer)
-	// 	Asm_x86(ctx *Asm_x86)
-	// 	Asm_6502(ctx *Asm_6502)
+	Asm_x86(asm *Asm_x86)
+	// Asm_6502(asm *Asm_6502)
 }
 
 func Precedence(n Node) uint {
-	switch n.(type) {
+	switch node := n.(type) {
 	case UnaryExpr:
-		switch n.(UnaryExpr).Order {
+		switch node.Order {
 		case OrderPrev:
 			return 0
 		case OrderPost:
@@ -47,7 +33,10 @@ func Precedence(n Node) uint {
 		case KwOr:
 			return 5
 		}
+	default:
+		return 1
 	}
+	return 0
 }
 
 type Order uint
@@ -121,4 +110,17 @@ func (comp Compound) Result() Type {
 		return comp.Body[len(comp.Body)-1].Result()
 	}
 	return Void{}
+}
+
+func (comp Compound) Asm_x86(asm *Asm_x86) {
+	asm.Scope = comp.Scope
+	asm.Writef("push rbp")
+	asm.Writef("mov rbp, rsp")
+	for _, node := range comp.Body {
+		node.Asm_x86(asm)
+	}
+	asm.Labelf("L%d", asm.PushLabel())
+	asm.Writef("pop rbp")
+	asm.Writef("ret")
+	asm.Scope = comp.Scope.Owner
 }

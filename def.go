@@ -5,8 +5,9 @@ type Def interface {
 }
 
 type Var struct {
-	Name string
-	Type Type
+	Name   string
+	Type   Type
+	Offset uint64
 }
 
 type Typedef struct {
