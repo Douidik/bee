@@ -12,7 +12,7 @@ type Asm_x86 struct {
 }
 type Asm_6502 Asm_x86
 
-func (asm *Asm_6502) PushLabel() uint32 {
+func (asm *Asm_x86) PushLabel() uint32 {
 	label := asm.label
 	asm.label += 1
 	return label

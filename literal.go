@@ -35,5 +35,14 @@ func (char CharExpr) Result() Type {
 }
 
 func (int IntExpr) Asm_x86(asm *Asm_x86) {
-	asm.Writef("push %x")
+	asm.Writef("push %d", int.Value)
+}
+
+func (fl FloatExpr) Asm_x86(asm *Asm_x86) {
+}
+
+func (str StrExpr) Asm_x86(asm *Asm_x86) {
+}
+
+func (char CharExpr) Asm_x86(asm *Asm_x86) {
 }

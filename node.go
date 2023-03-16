@@ -78,12 +78,12 @@ type For struct {
 func (ref Reference) Result() Type {
 	switch def := ref.Def.(type) {
 	case *Typedef:
-		return def.Type
 	case *Var:
 		return def.Type
 	default:
 		return Void{}
 	}
+	return Void{}
 }
 
 func (cast Cast) Result() Type {
@@ -112,6 +112,22 @@ func (comp Compound) Result() Type {
 	return Void{}
 }
 
+func (ref Reference) Asm_x86(asm *Asm_x86) {
+
+}
+
+func (cast Cast) Asm_x86(asm *Asm_x86) {
+}
+
+func (nest Nest) Asm_x86(asm *Asm_x86) {
+}
+
+func (i If) Asm_x86(asm *Asm_x86) {
+}
+
+func (f For) Asm_x86(asm *Asm_x86) {
+}
+
 func (comp Compound) Asm_x86(asm *Asm_x86) {
 	asm.Scope = comp.Scope
 	asm.Writef("push rbp")
@@ -121,6 +137,5 @@ func (comp Compound) Asm_x86(asm *Asm_x86) {
 	}
 	asm.Labelf("L%d", asm.PushLabel())
 	asm.Writef("pop rbp")
-	asm.Writef("ret")
 	asm.Scope = comp.Scope.Owner
 }

@@ -82,7 +82,7 @@ func (trait Trait) Repr() string {
 	switch trait {
 
 	case NewLine:
-		return "NewLine"
+		return "\\n"
 	case Empty:
 		return "Empty"
 	case Blank:

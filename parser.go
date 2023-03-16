@@ -22,20 +22,20 @@ func NewParser(name string, sn Scanner) Parser {
 }
 
 func (ps *Parser) Parse() (*Ast, error) {
-	ps.ast.Scope = &Scope{Owner: nil}
+	ps.ast.Scope = NewScope(nil)
 	ps.scope = ps.ast.Scope
-	ps.scope.Add(&Typedef{Name: "bool", Type: &Atom{size: 1}})
-	ps.scope.Add(&Typedef{Name: "char", Type: &Atom{size: 1, signed: true}})
-	ps.scope.Add(&Typedef{Name: "s8", Type: &Atom{size: 1, signed: true}})
-	ps.scope.Add(&Typedef{Name: "s16", Type: &Atom{size: 2, signed: true}})
-	ps.scope.Add(&Typedef{Name: "s32", Type: &Atom{size: 4, signed: true}})
-	ps.scope.Add(&Typedef{Name: "s64", Type: &Atom{size: 8, signed: true}})
-	ps.scope.Add(&Typedef{Name: "u8", Type: &Atom{size: 1}})
-	ps.scope.Add(&Typedef{Name: "u16", Type: &Atom{size: 2}})
-	ps.scope.Add(&Typedef{Name: "u32", Type: &Atom{size: 4}})
-	ps.scope.Add(&Typedef{Name: "u64", Type: &Atom{size: 8}})
-	ps.scope.Add(&Typedef{Name: "f32", Type: &Atom{size: 4, float: true}})
-	ps.scope.Add(&Typedef{Name: "f64", Type: &Atom{size: 8, float: true}})
+	// ps.scope.Add(&Typedef{Name: "bool", Type: &Atom{size: 1}})
+	// ps.scope.Add(&Typedef{Name: "char", Type: &Atom{size: 1, signed: true}})
+	// ps.scope.Add(&Typedef{Name: "s8", Type: &Atom{size: 1, signed: true}})
+	// ps.scope.Add(&Typedef{Name: "s16", Type: &Atom{size: 2, signed: true}})
+	// ps.scope.Add(&Typedef{Name: "s32", Type: &Atom{size: 4, signed: true}})
+	// ps.scope.Add(&Typedef{Name: "s64", Type: &Atom{size: 8, signed: true}})
+	// ps.scope.Add(&Typedef{Name: "u8", Type: &Atom{size: 1}})
+	// ps.scope.Add(&Typedef{Name: "u16", Type: &Atom{size: 2}})
+	// ps.scope.Add(&Typedef{Name: "u32", Type: &Atom{size: 4}})
+	// ps.scope.Add(&Typedef{Name: "u64", Type: &Atom{size: 8}})
+	// ps.scope.Add(&Typedef{Name: "f32", Type: &Atom{size: 4, float: true}})
+	// ps.scope.Add(&Typedef{Name: "f64", Type: &Atom{size: 8, float: true}})
 
 	for !ps.sn.Finished() {
 		node, err := ps.parseNode(NewLine)
@@ -55,7 +55,7 @@ func (ps *Parser) parseNode(delim Trait) (Node, error) {
 		if last = ps.token(delim); last.Ok {
 			break
 		}
-		node, err := ps.expectNode(head)
+		node, err := ps.expectNode(head, delim)
 		if err != nil {
 			return nil, err
 		}
@@ -76,7 +76,7 @@ func (ps *Parser) parseNode(delim Trait) (Node, error) {
 	}
 }
 
-func (ps *Parser) expectNode(prev Node) (Node, error) {
+func (ps *Parser) expectNode(prev Node, delim Trait) (Node, error) {
 	if ps.token(KwIf).Ok {
 		var (
 			i   If
@@ -128,7 +128,7 @@ func (ps *Parser) expectNode(prev Node) (Node, error) {
 		}
 
 		if init := ps.token(Define, Declare); init.Ok {
-			expr, err := ps.expectNode(nil)
+			expr, err := ps.parseNode(delim)
 			if err != nil {
 				return nil, err
 			}
@@ -176,13 +176,13 @@ func (ps *Parser) expectNode(prev Node) (Node, error) {
 		} else {
 			size = 4
 		}
-		return IntExpr{uint64(n), Atom{size: size, signed: true}}, err
+		return IntExpr{uint64(n), Atom{size: uint64(size), signed: true}}, err
 	}
 
 	if float := ps.token(Float); float.Ok {
 		f, err := strconv.ParseFloat(float.Expr, 64)
 
-		var size uint
+		var size uint64
 		if f > math.MaxFloat32 {
 			size = 8
 		} else {
@@ -205,7 +205,7 @@ func (ps *Parser) expectNode(prev Node) (Node, error) {
 
 	if prev == nil {
 		if sign := ps.token(Add, Sub); sign.Ok {
-			expr, err := ps.expectNode(nil)
+			expr, err := ps.expectNode(nil, delim)
 			if err != nil {
 				return nil, err
 			}
@@ -222,7 +222,7 @@ func (ps *Parser) expectNode(prev Node) (Node, error) {
 		if prev == nil {
 			return nil, ps.errorf(bin, "Missing pre-operand for binary expression")
 		}
-		next, err := ps.expectNode(nil)
+		next, err := ps.expectNode(nil, delim)
 		if err != nil {
 			return nil, err
 		}
@@ -239,7 +239,7 @@ func (ps *Parser) expectNode(prev Node) (Node, error) {
 		if prev != nil {
 			return UnaryExpr{OrderPost, prev, incr}, nil
 		} else {
-			next, err := ps.expectNode(nil)
+			next, err := ps.expectNode(nil, delim)
 			if err != nil {
 				return nil, err
 			}
@@ -271,7 +271,7 @@ func (ps *Parser) expectNode(prev Node) (Node, error) {
 }
 
 func (ps *Parser) parseCompound(delim, end Trait) (Compound, error) {
-	ps.scope = &Scope{Defs: map[string]Def{}, Owner: ps.scope}
+	ps.scope = NewScope(ps.scope)
 	compound := Compound{Scope: ps.scope, Body: make([]Node, 0)}
 
 	for !ps.sn.Finished() && !ps.token(end).Ok {

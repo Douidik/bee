@@ -49,3 +49,46 @@ func (decl DeclareExpr) Result() Type {
 func (def DefineExpr) Result() Type {
 	return def.Expr.Result()
 }
+
+func (un UnaryExpr) Asm_x86(asm *Asm_x86) {
+
+}
+
+func (bin BinaryExpr) Asm_x86(asm *Asm_x86) {
+	bin.Operands[0].Asm_x86(asm)
+	bin.Operands[1].Asm_x86(asm)
+
+	asm.Writef("pop rbx")
+	asm.Writef("pop rax")
+
+	switch bin.Operator.Trait {
+	case Sub:
+		asm.Writef("sub rax, rbx")
+	case Add:
+		asm.Writef("add rax, rbx")
+	default:
+		panic("todo!")
+	}
+
+	asm.Writef("push rax")
+}
+
+func (ind IndexExpr) Asm_x86(asm *Asm_x86) {
+}
+
+func (inv InvokeExpr) Asm_x86(asm *Asm_x86) {
+}
+
+func (decl DeclareExpr) Asm_x86(asm *Asm_x86) {
+}
+
+func (def DefineExpr) Asm_x86(asm *Asm_x86) {
+	switch d := def.Def.(type) {
+	case Var:
+		def.Expr.Asm_x86(asm)
+		asm.Writef("pop rax")
+		asm.Writef("mov dword ptr [rbp - %d], eax", d.Offset)
+	case Fn:
+		panic("todo!")
+	}
+}

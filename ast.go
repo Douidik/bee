@@ -11,6 +11,10 @@ type Scope struct {
 	Owner *Scope
 }
 
+func NewScope(owner *Scope) *Scope {
+	return &Scope{Sp: 0, Defs: make(map[string]Def), Owner: owner}
+}
+
 func (sc *Scope) Search(id string) Def {
 	if def, found := sc.Defs[id]; found {
 		return def
@@ -22,7 +26,7 @@ func (sc *Scope) Search(id string) Def {
 }
 
 func (sc *Scope) Add(def Def) Def {
-	if v, isVar := def.(Var); isVar {
+	if v, ok := def.(*Var); ok {
 		v.Offset = sc.Sp
 		sc.Sp += uint64(v.Type.Size())
 	}
@@ -39,5 +43,7 @@ func (ast *Ast) Asm_x86() Asm_x86 {
 	for _, node := range ast.Body {
 		node.Asm_x86(&asm)
 	}
+	asm.Writef("mov eax")
+	asm.Writef("int 0x80")
 	return asm
 }
